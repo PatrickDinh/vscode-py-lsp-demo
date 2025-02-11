@@ -5,8 +5,7 @@
 
 import * as vscode from 'vscode';
 import * as assert from 'assert';
-import { getDocUri, activate } from './helper';
-import { CodeActionKind, CodeAction } from 'vscode-languageclient/node';
+import { getDocUri, activate, doc } from './helper';
 
 suite('Should get diagnostics', () => {
 	const docUri = getDocUri('diagnostics.py');
@@ -15,16 +14,28 @@ suite('Should get diagnostics', () => {
 		await testDiagnostics(docUri, [
 			{ message: 'Python list isn\'t supported in Algorand Python', range: toRange(0, 4, 0, 9), severity: vscode.DiagnosticSeverity.Error, source: 'ex' },
 		]);
+	});
+});
 
-		const e = new vscode.WorkspaceEdit();
-		e.replace(docUri, toRange(0, 4, 0, 9), "arc4.Array(");
-		await testCodeActions(docUri, toRange(0, 4, 0, 9), [
-			{ 
-				title: 'Replace \'list\' with \'arc4.Array\'', 
-				kind: vscode.CodeActionKind.QuickFix, 
-				edit: e
-			}
-		]);
+suite.only('Apply code actions should fix the issue', () => {
+	const docUri = getDocUri('diagnostics.py');
+
+	test('Foo 1', async () => {
+		await activate(docUri);
+
+		const range = toRange(0, 4, 0, 9);
+
+		// Execute the code action provider command to retrieve action list.
+		const codeActions = await vscode.commands.executeCommand<vscode.CodeAction[]>(
+			'vscode.executeCodeActionProvider',
+			docUri,
+			range,
+			vscode.CodeActionKind.QuickFix.value
+		);
+
+		assert.equal(codeActions[0].title, "Replace 'list' with 'arc4.Array'");
+		await vscode.workspace.applyEdit(codeActions[0].edit);
+		assert.equal(doc.getText(), "a = arc4.Array([1, 2, 3])");
 	});
 });
 
@@ -46,31 +57,4 @@ async function testDiagnostics(docUri: vscode.Uri, expectedDiagnostics: vscode.D
 		assert.deepEqual(actualDiagnostic.range, expectedDiagnostic.range);
 		assert.equal(actualDiagnostic.severity, expectedDiagnostic.severity);
 	});
-}
-
-async function testCodeActions(docUri: vscode.Uri, range: vscode.Range, expectedCodeActions: vscode.CodeAction[]) {
-	await activate(docUri);
-
-	// Execute the code action provider command to retrieve action list.
-	const actualCodeActions = await vscode.commands.executeCommand<vscode.CodeAction[]>(
-		'vscode.executeCodeActionProvider',
-		docUri,
-		range,
-		CodeActionKind.QuickFix
-	);
-
-	const actualAction = actualCodeActions[0];
-	const expectedAction = expectedCodeActions[0];
-	
-	assert.equal(actualAction.title, expectedAction.title, `Mismatch in title for code action`);
-		
-	// Compare the associated commands, if any.
-	if (expectedAction.command || actualAction.command) {
-		assert.deepEqual(actualAction.command, expectedAction.command, `Mismatch in command for code action`);
-	}
-
-	// Compare workspace edits, if any.
-	if (expectedAction.edit || actualAction.edit) {
-		assert.deepEqual(actualAction.edit, expectedAction.edit, `Mismatch in edit for code action`);
-	}
 }
