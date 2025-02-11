@@ -12,8 +12,6 @@ import {
 	DidChangeConfigurationNotification,
 	TextDocumentSyncKind,
 	InitializeResult,
-	DocumentDiagnosticReportKind,
-	type DocumentDiagnosticReport,
 	CodeAction,
 	CodeActionKind,
 	WorkspaceEdit,
@@ -55,10 +53,6 @@ connection.onInitialize((params: InitializeParams) => {
 			// Tell the client that this server supports code completion.
 			completionProvider: {
 				resolveProvider: true
-			},
-			diagnosticProvider: {
-				interFileDependencies: false,
-				workspaceDiagnostics: false
 			},
 			// Advertise code action support so that quick fixes are available.
 			codeActionProvider: {
@@ -138,33 +132,14 @@ documents.onDidClose(e => {
 });
 
 
-connection.languages.diagnostics.on(async (params) => {
-	const document = documents.get(params.textDocument.uri);
-	if (document !== undefined) {
-		return {
-			kind: DocumentDiagnosticReportKind.Full,
-			items: await validateTextDocument(document)
-		} satisfies DocumentDiagnosticReport;
-	} else {
-		// We don't know the document. We can either try to read it from disk
-		// or we don't report problems for it.
-		return {
-			kind: DocumentDiagnosticReportKind.Full,
-			items: []
-		} satisfies DocumentDiagnosticReport;
-	}
-});
-
 // The content of a text document has changed. This event is emitted
 // when the text document first opened or when its content has changed.
-documents.onDidChangeContent(change => {
-	validateTextDocument(change.document).then(diagnostics => {
-		connection.sendDiagnostics({
-			uri: change.document.uri,
-			diagnostics: diagnostics
-		});
+documents.onDidChangeContent(async (change) => {
+	const diagnostics = await validateTextDocument(change.document);
+	connection.sendDiagnostics({
+		uri: change.document.uri,
+		diagnostics: diagnostics
 	});
-
 });
 
 
